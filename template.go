@@ -8,8 +8,10 @@ import (
 	"go/ast"
 	"go/build"
 	"go/format"
+	"go/importer"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"io/ioutil"
 	"path"
 	"regexp"
@@ -157,15 +159,67 @@ func parseFile(path string, src interface{}) (*token.FileSet, *ast.File) {
 }
 
 // Replace the identifers in f
-func replaceIdentifier(f *ast.File, old, new string) {
+func replaceIdentifier(f *ast.File, info *types.Info, old, new string) {
+	// Inspect works depth-first so we can add identifiers to skip set if they are deeper in a tree
+	skip := make(map[*ast.Ident]bool)
 	// Inspect the AST and print all identifiers and literals.
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch x := n.(type) {
+		case *ast.FuncDecl:
+			if x.Recv != nil {
+				// Do not replace method names
+				skip[x.Name] = true
+			}
+		case *ast.SelectorExpr:
+			anons := make(map[string]bool)
+			typ := info.TypeOf(x.X).Underlying()
+			if stct, ok := typ.(*types.Struct); ok {
+				for i := 0; i < stct.NumFields(); i++ {
+					fld := stct.Field(i)
+					if fld.Anonymous() {
+						// Do not replace named fields and method names after a point
+						anons[fld.Name()] = true
+					}
+				}
+			}
+			if !anons[x.Sel.Name] {
+				// Do not replace named fields and method names after a point
+				skip[x.Sel] = true
+			}
+		case *ast.Field:
+			for _, n := range x.Names {
+				// Do not replace named fields
+				skip[n] = true
+			}
+		case *ast.CompositeLit:
+			names := make(map[string]bool)
+			if ident, ok := x.Type.(*ast.Ident); ok {
+				if typ, ok := ident.Obj.Decl.(*ast.TypeSpec); ok {
+					if str, ok := typ.Type.(*ast.StructType); ok {
+						for _, fld := range str.Fields.List {
+							for _, fieldName := range fld.Names {
+								// Do not replace named fields in a composite literal
+								names[fieldName.Name] = true
+							}
+						}
+					}
+				}
+			}
+			for _, elt := range x.Elts {
+				if kv, ok := elt.(*ast.KeyValueExpr); ok {
+					if ident, ok := kv.Key.(*ast.Ident); ok {
+						if names[ident.Name] {
+							// Do not replace named fields in a composite literal
+							skip[ident] = true
+						}
+					}
+				}
+			}
 		case *ast.Ident:
 			// We replace the identifier name
 			// which is a bit untidy if we weren't
 			// replacing with an identifier
-			if x.Name == old {
+			if x.Name == old && !skip[x] {
 				x.Name = new
 			}
 		}
@@ -190,6 +244,18 @@ func (t *template) parse(inputFile string) {
 	t.newIsPublic = ast.IsExported(t.Name)
 
 	fset, f := parseFile(inputFile, nil)
+
+	conf := types.Config{Importer: importer.Default()}
+	info := &types.Info{
+		Defs:  make(map[*ast.Ident]types.Object),
+		Uses:  make(map[*ast.Ident]types.Object),
+		Types: make(map[ast.Expr]types.TypeAndValue),
+	}
+	_, err := conf.Check(inputFile, fset, []*ast.File{f}, info)
+	if err != nil {
+		fatalf("Type checking error: %v", err)
+	}
+
 	t.findTemplateDefinition(f)
 
 	// debugf("Decls = %#v", f.Decls)
@@ -302,7 +368,7 @@ func (t *template) parse(inputFile string) {
 
 	// Replace the identifiers
 	for name, replacement := range t.mappings {
-		replaceIdentifier(f, name, replacement)
+		replaceIdentifier(f, info, name, replacement)
 	}
 
 	// Change the package to the local package name
