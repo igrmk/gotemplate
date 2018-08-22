@@ -156,6 +156,7 @@ func parseFile(path string, src interface{}) (*token.FileSet, *ast.File) {
 
 // Replace the identifers in f
 func replaceIdentifier(f *ast.File, info *types.Info, old, new string) {
+	// Inspect works depth-first so we can add identifiers to skip if they are deeper in a tree
 	skip := make(map[*ast.Ident]bool)
 	// Inspect the AST and print all identifiers and literals.
 	ast.Inspect(f, func(n ast.Node) bool {
