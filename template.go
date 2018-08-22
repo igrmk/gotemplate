@@ -156,7 +156,7 @@ func parseFile(path string, src interface{}) (*token.FileSet, *ast.File) {
 
 // Replace the identifers in f
 func replaceIdentifier(f *ast.File, info *types.Info, old, new string) {
-	// Inspect works depth-first so we can add identifiers to skip if they are deeper in a tree
+	// Inspect works depth-first so we can add identifiers to skip set if they are deeper in a tree
 	skip := make(map[*ast.Ident]bool)
 	// Inspect the AST and print all identifiers and literals.
 	ast.Inspect(f, func(n ast.Node) bool {
@@ -173,13 +173,13 @@ func replaceIdentifier(f *ast.File, info *types.Info, old, new string) {
 				for i := 0; i < stct.NumFields(); i++ {
 					fld := stct.Field(i)
 					if fld.Anonymous() {
-						// Do not replace named fields
+						// Do not replace named fields and method names after a point
 						anons[fld.Name()] = true
 					}
 				}
 			}
 			if !anons[x.Sel.Name] {
-				// Do not replace named fields
+				// Do not replace named fields and method names after a point
 				skip[x.Sel] = true
 			}
 		case *ast.Field:
@@ -194,7 +194,7 @@ func replaceIdentifier(f *ast.File, info *types.Info, old, new string) {
 					if str, ok := typ.Type.(*ast.StructType); ok {
 						for _, fld := range str.Fields.List {
 							for _, fieldName := range fld.Names {
-								// Do not replace named fields in composite literal
+								// Do not replace named fields in a composite literal
 								names[fieldName.Name] = true
 							}
 						}
@@ -205,7 +205,7 @@ func replaceIdentifier(f *ast.File, info *types.Info, old, new string) {
 				if kv, ok := elt.(*ast.KeyValueExpr); ok {
 					if ident, ok := kv.Key.(*ast.Ident); ok {
 						if names[ident.Name] {
-							// Do not replace named fields in composite literal
+							// Do not replace named fields in a composite literal
 							skip[ident] = true
 						}
 					}
