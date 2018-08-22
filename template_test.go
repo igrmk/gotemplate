@@ -36,6 +36,18 @@ func UtilityFunc1() {}
 func utilityFunc() {}
 func (a A) f0() {}
 func (a *A) F1() {}
+
+type N struct{}
+type M struct{ N }
+type K struct{ N int }
+
+func (a *A) N() {}
+func (a *A) O() { a.N() }
+func f2() M     { return M{N: N{}} }
+func f3() K     { return K{N: 0} }
+func f4() N     { return f2().N }
+func f5() int   { return f3().N }
+
 var AVar1 int
 var aVar2 int
 var (
@@ -68,6 +80,17 @@ func utilityFuncMySet()       {}
 func (a int) f0()             {}
 func (a *int) F1()            {}
 
+type NMySet struct{}
+type MMySet struct{ NMySet }
+type KMySet struct{ N int }
+
+func (a *int) N()     {}
+func (a *int) O()     { a.N() }
+func f2MySet() MMySet { return MMySet{NMySet: NMySet{}} }
+func f3MySet() KMySet { return KMySet{N: 0} }
+func f4MySet() NMySet { return f2MySet().NMySet }
+func f5MySet() int    { return f3MySet().N }
+
 var AVar1MySet int
 var aVar2MySet int
 var (
@@ -98,6 +121,17 @@ func utilityFunc1MySet()              {}
 func utilityFuncMySet()               {}
 func (a float64) f0()                 {}
 func (a *float64) F1()                {}
+
+type nMySet struct{}
+type mMySet struct{ nMySet }
+type kMySet struct{ N int }
+
+func (a *float64) N() {}
+func (a *float64) O() { a.N() }
+func f2MySet() mMySet { return mMySet{nMySet: nMySet{}} }
+func f3MySet() kMySet { return kMySet{N: 0} }
+func f4MySet() nMySet { return f2MySet().nMySet }
+func f5MySet() int    { return f3MySet().N }
 
 var aVar1MySet int
 var aVar2MySet int
