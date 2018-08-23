@@ -344,7 +344,7 @@ func (t *template) parse(inputFile string) {
 		var err error
 		curr, err = ioutil.ReadFile(outputFileName)
 		if err != nil && !os.IsNotExist(err) {
-			fatalf("Cannot open saved file: %v", err)
+			fatalf("Cannot open existing file: %v", err)
 		}
 	}
 
