@@ -13,6 +13,7 @@ import (
 	"go/token"
 	"go/types"
 	"io/ioutil"
+	"os"
 	"path"
 	"regexp"
 	"strings"
@@ -408,7 +409,7 @@ func (t *template) parse(inputFile string) {
 	if !testingMode {
 		var err error
 		curr, err = ioutil.ReadFile(outputFileName)
-		if err != nil {
+		if err != nil && !os.IsNotExist(err) {
 			fatalf("Cannot open saved file: %v", err)
 		}
 	}
