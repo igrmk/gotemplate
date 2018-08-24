@@ -29,16 +29,17 @@ const (
 
 // Holds the desired template
 type template struct {
-	Package      string
-	Name         string
-	Args         []string
-	NewPackage   string
-	Dir          string
-	templateName string
-	templateArgs []string
-	mappings     map[string]string
-	newIsPublic  bool
-	inputFile    string
+	Package         string
+	Name            string
+	Args            []string
+	NewPackage      string
+	Dir             string
+	templateName    string
+	templateArgs    []string
+	templateArgsMap map[string]string
+	mappings        map[types.Object]string
+	newIsPublic     bool
+	inputFile       string
 }
 
 // findPackageName reads all the go packages in the curent directory
@@ -55,17 +56,18 @@ func findPackageName() string {
 func newTemplate(dir, pkg, templateArgsString string) *template {
 	name, templateArgs := parseTemplateAndArgs(templateArgsString)
 	return &template{
-		Package:    pkg,
-		Name:       name,
-		Args:       templateArgs,
-		Dir:        dir,
-		mappings:   make(map[string]string),
-		NewPackage: findPackageName(),
+		Package:         pkg,
+		Name:            name,
+		Args:            templateArgs,
+		Dir:             dir,
+		mappings:        make(map[types.Object]string),
+		NewPackage:      findPackageName(),
+		templateArgsMap: make(map[string]string),
 	}
 }
 
 // Add a mapping for identifier
-func (t *template) addMapping(name string) {
+func (t *template) addMapping(object types.Object, name string) {
 	replacementName := ""
 	if !strings.Contains(name, t.templateName) {
 		// If name doesn't contain template name then just prefix it
@@ -86,7 +88,7 @@ func (t *template) addMapping(name string) {
 	if !t.newIsPublic && ast.IsExported(replacementName) {
 		replacementName = strings.ToLower(replacementName[:1]) + replacementName[1:]
 	}
-	t.mappings[name] = replacementName
+	t.mappings[object] = replacementName
 }
 
 // Parse the arguments string Template(A, B, C)
@@ -144,6 +146,9 @@ func (t *template) findTemplateDefinition(f *ast.File) {
 	if len(t.templateArgs) != len(t.Args) {
 		fatalf("Wrong number of arguments - template is expecting %d but %d supplied", len(t.Args), len(t.templateArgs))
 	}
+	for i, to := range t.Args {
+		t.templateArgsMap[t.templateArgs[i]] = to
+	}
 	debugf("templateName = %v, templateArgs = %v", t.templateName, t.templateArgs)
 }
 
@@ -160,82 +165,23 @@ func parseFile(path string, src interface{}) (*token.FileSet, *ast.File) {
 }
 
 // Replace the identifers in f
-func replaceIdentifier(f *ast.File, info *types.Info, old, new string) {
-	// Inspect works depth-first so we can add identifiers to skip set if they are deeper in a tree
-	skip := make(map[*ast.Ident]bool)
-	// Inspect the AST and print all identifiers and literals.
-	ast.Inspect(f, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.FuncDecl:
-			if x.Recv != nil {
-				// Do not replace method names
-				skip[x.Name] = true
-			}
-		case *ast.SelectorExpr:
-			anons := make(map[string]bool)
-			typ := info.TypeOf(x.X).Underlying()
-			if stct, ok := typ.(*types.Struct); ok {
-				for i := 0; i < stct.NumFields(); i++ {
-					fld := stct.Field(i)
-					if fld.Anonymous() {
-						// Do not replace named fields and method names after a point
-						anons[fld.Name()] = true
-					}
-				}
-			}
-			if !anons[x.Sel.Name] {
-				// Do not replace named fields and method names after a point
-				skip[x.Sel] = true
-			}
-		case *ast.Field:
-			for _, n := range x.Names {
-				// Do not replace named fields
-				skip[n] = true
-			}
-		case *ast.CompositeLit:
-			names := make(map[string]bool)
-			if ident, ok := x.Type.(*ast.Ident); ok {
-				if typ, ok := ident.Obj.Decl.(*ast.TypeSpec); ok {
-					if str, ok := typ.Type.(*ast.StructType); ok {
-						for _, fld := range str.Fields.List {
-							for _, fieldName := range fld.Names {
-								// Do not replace named fields in a composite literal
-								names[fieldName.Name] = true
-							}
-						}
-					}
-				}
-			}
-			for _, elt := range x.Elts {
-				if kv, ok := elt.(*ast.KeyValueExpr); ok {
-					if ident, ok := kv.Key.(*ast.Ident); ok {
-						if names[ident.Name] {
-							// Do not replace named fields in a composite literal
-							skip[ident] = true
-						}
-					}
-				}
-			}
-		case *ast.Ident:
-			// We replace the identifier name
-			// which is a bit untidy if we weren't
-			// replacing with an identifier
-			if x.Name == old && !skip[x] {
-				x.Name = new
-			}
-		}
-		return true
-	})
-}
-
-// Return true if name is a template argument
-func (t *template) isTemplateArgument(name string) bool {
-	for _, item := range t.templateArgs {
-		if item == name {
-			return true
+func replaceIdentifier(f *ast.File, info *types.Info, old types.Object, new string) {
+	for id, obj := range info.Defs {
+		if obj == old {
+			id.Name = new
 		}
 	}
-	return false
+	for id, obj := range info.Uses {
+		if obj == old {
+			id.Name = new
+		} else {
+			if var_, ok := obj.(*types.Var); ok && var_.Anonymous() {
+				if named, ok := var_.Type().(*types.Named); ok && named.Obj() == old {
+					id.Name = new
+				}
+			}
+		}
+	}
 }
 
 // Parses the template file
@@ -261,11 +207,11 @@ func (t *template) parse(inputFile string) {
 
 	// debugf("Decls = %#v", f.Decls)
 	// Find names which need to be adjusted
-	namesToMangle := []string{}
+	namesToMangle := map[types.Object]string{}
 	newDecls := []ast.Decl{}
-	for _, Decl := range f.Decls {
+	for _, decl := range f.Decls {
 		remove := false
-		switch d := Decl.(type) {
+		switch d := decl.(type) {
 		case *ast.GenDecl:
 			// A general definition
 			switch d.Tok {
@@ -280,9 +226,12 @@ func (t *template) parse(inputFile string) {
 					v := spec.(*ast.ValueSpec)
 					for j, name := range v.Names {
 						debugf("VAR or CONST %v", name.Name)
-						namesToMangle = append(namesToMangle, name.Name)
-						if t.isTemplateArgument(name.Name) {
+						def := info.Defs[name]
+						if _, ok := t.templateArgsMap[name.Name]; ok {
 							namesToRemove = append(namesToRemove, j)
+							t.mappings[def] = t.templateArgsMap[name.Name]
+						} else {
+							namesToMangle[def] = name.Name
 						}
 					}
 					// Shuffle the names to remove out of v.Names and v.Values
@@ -307,10 +256,13 @@ func (t *template) parse(inputFile string) {
 				for i, spec := range d.Specs {
 					typeSpec := spec.(*ast.TypeSpec)
 					debugf("Type %v", typeSpec.Name.Name)
-					namesToMangle = append(namesToMangle, typeSpec.Name.Name)
 					// Remove type A if it is a template definition
-					if t.isTemplateArgument(typeSpec.Name.Name) {
+					def := info.Defs[typeSpec.Name]
+					if _, ok := t.templateArgsMap[typeSpec.Name.Name]; ok {
 						namesToRemove = append(namesToRemove, i)
+						t.mappings[def] = t.templateArgsMap[typeSpec.Name.Name]
+					} else {
+						namesToMangle[def] = typeSpec.Name.Name
 					}
 				}
 				for i := len(namesToRemove) - 1; i >= 0; i-- {
@@ -331,15 +283,20 @@ func (t *template) parse(inputFile string) {
 			} else {
 				//debugf("FuncDecl = %#v", d)
 				debugf("FuncDecl = %s", d.Name.Name)
-				namesToMangle = append(namesToMangle, d.Name.Name)
+				def := info.Defs[d.Name]
 				// Remove func A() if it is a template definition
-				remove = t.isTemplateArgument(d.Name.Name)
+				if _, ok := t.templateArgsMap[d.Name.Name]; ok {
+					remove = true
+					t.mappings[def] = t.templateArgsMap[d.Name.Name]
+				} else {
+					namesToMangle[def] = d.Name.Name
+				}
 			}
 		default:
-			fatalf("Unknown Decl %#v", Decl)
+			fatalf("Unknown Decl %#v", decl)
 		}
 		if !remove {
-			newDecls = append(newDecls, Decl)
+			newDecls = append(newDecls, decl)
 		}
 	}
 	debugf("Names to mangle = %#v", namesToMangle)
@@ -347,18 +304,13 @@ func (t *template) parse(inputFile string) {
 	// Remove the stub type definitions "type A int" from the package
 	f.Decls = newDecls
 
-	// Map the type definitions A -> string, B -> int
-	for i := range t.Args {
-		t.mappings[t.templateArgs[i]] = t.Args[i]
-	}
-
 	found := false
-	for _, name := range namesToMangle {
+	for obj, name := range namesToMangle {
 		if name == t.templateName {
 			found = true
-			t.addMapping(name)
-		} else if _, found := t.mappings[name]; !found {
-			t.addMapping(name)
+			t.addMapping(obj, name)
+		} else if _, found := t.mappings[obj]; !found {
+			t.addMapping(obj, name)
 		}
 
 	}
