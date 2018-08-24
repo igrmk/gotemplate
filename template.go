@@ -171,6 +171,8 @@ func replaceIdentifier(f *ast.File, info *types.Info, old types.Object, new stri
 			id.Name = new
 		} else {
 			if var_, ok := obj.(*types.Var); ok && var_.Anonymous() {
+				// This is an anonymous field in composite literal
+				// We should replace it if we replace a type it represents
 				if named, ok := var_.Type().(*types.Named); ok && named.Obj() == old {
 					id.Name = new
 				}
@@ -314,8 +316,8 @@ func (t *template) parse(inputFile string) {
 	debugf("mappings = %#v", t.mappings)
 
 	// Replace the identifiers
-	for name, replacement := range t.mappings {
-		replaceIdentifier(f, info, name, replacement)
+	for id, replacement := range t.mappings {
+		replaceIdentifier(f, info, id, replacement)
 	}
 
 	// Change the package to the local package name
