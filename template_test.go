@@ -47,6 +47,10 @@ func f2() M     { return M{N: N{}} }
 func f3() K     { return K{N: 0} }
 func f4() N     { return f2().N }
 func f5() int   { return f3().N }
+func f6() {
+	N := 0
+	_ = N
+}
 
 var AVar1 int
 var aVar2 int
@@ -90,6 +94,10 @@ func f2MySet() MMySet { return MMySet{NMySet: NMySet{}} }
 func f3MySet() KMySet { return KMySet{N: 0} }
 func f4MySet() NMySet { return f2MySet().NMySet }
 func f5MySet() int    { return f3MySet().N }
+func f6MySet() {
+	N := 0
+	_ = N
+}
 
 var AVar1MySet int
 var aVar2MySet int
@@ -132,6 +140,10 @@ func f2MySet() mMySet { return mMySet{nMySet: nMySet{}} }
 func f3MySet() kMySet { return kMySet{N: 0} }
 func f4MySet() nMySet { return f2MySet().nMySet }
 func f5MySet() int    { return f3MySet().N }
+func f6MySet() {
+	N := 0
+	_ = N
+}
 
 var aVar1MySet int
 var aVar2MySet int
