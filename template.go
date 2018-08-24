@@ -189,9 +189,8 @@ func (t *template) parse(inputFile string) {
 
 	conf := types.Config{Importer: importer.Default()}
 	info := &types.Info{
-		Defs:  make(map[*ast.Ident]types.Object),
-		Uses:  make(map[*ast.Ident]types.Object),
-		Types: make(map[ast.Expr]types.TypeAndValue),
+		Defs: make(map[*ast.Ident]types.Object),
+		Uses: make(map[*ast.Ident]types.Object),
 	}
 	_, err := conf.Check(inputFile, fset, []*ast.File{f}, info)
 	if err != nil {
