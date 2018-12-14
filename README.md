@@ -21,6 +21,7 @@ It will also pull in a set of templates you can start using straight away
   * [list](http://godoc.org/github.com/ncw/gotemplate/list)
   * [sort](http://godoc.org/github.com/ncw/gotemplate/sort)
   * [heap](http://godoc.org/github.com/ncw/gotemplate/heap)
+  * [treemap](http://godoc.org/github.com/ncw/gotemplate/treemap)
 
 Using templates
 ---------------
@@ -259,3 +260,4 @@ Contributors
   * Patrick Oyarzun <patrickoyarzun@gmail.com>
   * Adam Willis <akwillis@inbox.com>
   * Paul Jolly <paul@myitcv.org.uk>
+  * Igor Mikushkin <igor.mikushkin@gmail.com>

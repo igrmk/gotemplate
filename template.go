@@ -166,6 +166,9 @@ func parseFile(path string, src interface{}) (*token.FileSet, *ast.File) {
 
 // Replace the identifers in f
 func replaceIdentifier(f *ast.File, info *types.Info, old types.Object, new string) {
+	// We replace the identifier name with a string
+	// which is a bit untidy if we weren't
+	// replacing with an identifier
 	for id, obj := range info.Defs {
 		if obj == old {
 			id.Name = new
